@@ -1,0 +1,10 @@
+Documento: /workspaces/modelos_basados_contenido/samples/doc1.txt
+Idx	Termino	TF	IDF	TF-IDF
+
+Documento: /workspaces/modelos_basados_contenido/samples/doc2.txt
+Idx	Termino	TF	IDF	TF-IDF
+
+Matriz de similitud coseno:
+	0	1	
+0	0	0	
+1	0	0	
