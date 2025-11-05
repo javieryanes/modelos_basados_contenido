@@ -2,6 +2,8 @@
 #include <getopt.h>
 using namespace std;
 
+// Convierte una cadena a minúsculas de forma segura para char.
+// Se usa para normalizar stopwords y lemas antes de compararlas.
 static inline string to_lower(const string &s){
     string out;
     out.reserve(s.size());
@@ -9,6 +11,9 @@ static inline string to_lower(const string &s){
     return out;
 }
 
+// Normaliza un token: mantiene letras y apóstrofes (en minúsculas),
+// mantiene dígitos tal cual, y reemplaza cualquier otro carácter por espacio.
+// Esto facilita la tokenización posterior separando por espacios.
 static inline string normalize_token(const string &s){
     string out;
     for(char c: s){
@@ -19,6 +24,10 @@ static inline string normalize_token(const string &s){
     return out;
 }
 
+// Tokeniza el texto normalizado y aplica lematización y eliminación de stopwords.
+// - normalize_token prepara la cadena para separar por espacios.
+// - Para cada token se busca un lema en el mapa, si existe se usa el lema.
+// - Se filtran tokens vacíos y stopwords.
 vector<string> tokenize_and_process(const string &text, const unordered_set<string> &stopwords, const unordered_map<string,string> &lemmas){
     string norm = normalize_token(text);
     vector<string> tokens;
@@ -41,6 +50,8 @@ vector<string> tokenize_and_process(const string &text, const unordered_set<stri
     return tokens;
 }
 
+// Lee todo el contenido de un fichero y lo devuelve como string.
+// Si no se puede abrir el fichero devuelve cadena vacía.
 string read_file_all(const string &path){
     ifstream in(path);
     if(!in) return string();
@@ -49,6 +60,8 @@ string read_file_all(const string &path){
     return ss.str();
 }
 
+// Carga stopwords desde un fichero.
+// Convierte todas las stopwords a minúsculas para comparaciones.
 unordered_set<string> load_stopwords(const string &path){
     unordered_set<string> s;
     if(path.empty()) return s;
@@ -60,6 +73,7 @@ unordered_set<string> load_stopwords(const string &path){
     return s;
 }
 
+// Carga lemas desde un fichero con pares por línea.
 unordered_map<string,string> load_lemmas(const string &path){
     unordered_map<string,string> m;
     if(path.empty()) return m;
@@ -95,14 +109,11 @@ int main(int argc, char **argv){
 
     vector<string> doc_paths;
     if(!dir.empty()){
-        // read all .txt files in dir
-        // Portable simple approach using <filesystem>
         namespace fs = std::filesystem;
         try{
             for(auto &p: fs::directory_iterator(dir)){
                 if(!p.is_regular_file()) continue;
                 if(p.path().extension()!=".txt") continue;
-                // ignore stopwords/lemmas files if they are inside the same dir
                 string fname = p.path().filename().string();
                 if(!stopfile.empty()){
                     if(p.path()==std::filesystem::path(stopfile) || fname==std::filesystem::path(stopfile).filename().string()) continue;
@@ -131,17 +142,18 @@ int main(int argc, char **argv){
 
     int N = (int)doc_paths.size();
     vector<unordered_map<string,int>> doc_counts(N);
-    unordered_map<string,int> df; // document frequency
+    unordered_map<string,int> df; 
 
+    // Procesamiento de cada documento: tokenizar, contar términos y actualizar DF.
     for(int i=0;i<N;++i){
         string content = read_file_all(doc_paths[i]);
         auto tokens = tokenize_and_process(content, stopwords, lemmas);
         for(const auto &t: tokens) doc_counts[i][t]++;
-        // update df
+        // actualizar frecuencia de documento
         for(const auto &kv: doc_counts[i]) df[kv.first]++;
     }
 
-    // vocabulary index
+    // Construcción del vocabulario ordenado y mapeo término
     vector<string> vocab;
     vocab.reserve(df.size());
     for(const auto &kv: df) vocab.push_back(kv.first);
@@ -154,33 +166,34 @@ int main(int argc, char **argv){
     vector<double> idf_val(V);
     for(int i=0;i<V;++i){
         int dfi = df[vocab[i]];
-        // avoid division by zero
+        // cálculo IDF: log(N / df)
+        // se evita división por cero comprobando dfi
         if(dfi<=0) idf_val[i] = 0.0;
         else idf_val[i] = log((double)N / (double)dfi);
     }
 
-    // prepare TF-IDF vectors (sparse representation)
+    // Preparar vectores TF-IDF y normas L2 para coseno.
     vector<unordered_map<int,double>> tfidf_vec(N);
     vector<double> norms(N, 0.0);
 
     for(int i=0;i<N;++i){
         for(const auto &kv: doc_counts[i]){
             const string &term = kv.first;
-            int tf = kv.second; // raw count
+            int tf = kv.second; 
             int idx = term_index[term];
             double idfv = idf_val[idx];
             double tfidf = tf * idfv;
             tfidf_vec[i][idx] = tfidf;
             norms[i] += tfidf * tfidf;
         }
-        norms[i] = sqrt(norms[i]);
+        norms[i] = sqrt(norms[i]); // norma L2 del vector TF-IDF
     }
 
-    // Output per-document tables
+    // Salida de tablas por documento con Idx, término, TF, IDF y TF-IDF.
     for(int i=0;i<N;++i){
         cout << "Documento: " << doc_paths[i] << "\n";
         cout << "Idx\tTermino\tTF\tIDF\tTF-IDF\n";
-        // build a vector of entries for sorting by index
+        // construir vector para ordenar por índice
         vector<pair<int,string>> entries;
         for(const auto &kv: doc_counts[i]) entries.push_back({term_index[kv.first], kv.first});
         sort(entries.begin(), entries.end());
@@ -195,9 +208,8 @@ int main(int argc, char **argv){
         cout << "\n";
     }
 
-    // Cosine similarity matrix
+    // Cálculo y salida de la matriz de similitud por coseno entre documentos.
     cout << "Matriz de similitud coseno:\n";
-    // header
     cout << "\t";
     for(int j=0;j<N;++j) cout << j << "\t";
     cout << "\n";
@@ -205,7 +217,7 @@ int main(int argc, char **argv){
         cout << i << "\t";
         for(int j=0;j<N;++j){
             double dot = 0.0;
-            // iterate smaller map
+            // iterar sobre el mapa más pequeño para eficiencia
             if(tfidf_vec[i].size() < tfidf_vec[j].size()){
                 for(const auto &kv: tfidf_vec[i]){
                     auto it = tfidf_vec[j].find(kv.first);
