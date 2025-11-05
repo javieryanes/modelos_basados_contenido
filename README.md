@@ -22,7 +22,7 @@ Uso
 - Pasando archivos concretos:
 
 ```bash
-./bin/tfidf -s modelos/stopwords.txt -l modelos/lemmas.txt ejemplos/doc1.txt ejemplos/doc2.txt
+./bin/tfidf -s modelos/stopwords.txt -l modelos/lemmas.txt ejemplos/document-01.txt ejemplos/document-02.txt
 ```
 
 Salida
